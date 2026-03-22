@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>专业视频水印工具</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei","PingFang SC",Arial,sans-serif}
+        body{background:linear-gradient(135deg,#b8e1fc,#d4f1f9);min-height:100vh;padding:16px}
+        
+        /* 登录界面 */
+        .login-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:20000;display:flex;justify-content:center;align-items:center}
+        .login-overlay.hide{display:none}
+        .login-card{background:white;border-radius:32px;padding:32px 28px;width:90%;max-width:400px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5)}
+        .login-card h2{text-align:center;color:#1a6ea8;margin-bottom:8px;font-size:28px}
+        .login-card .sub{text-align:center;color:#666;font-size:13px;margin-bottom:24px}
+        .login-input{width:100%;padding:14px 16px;margin-bottom:16px;border:1px solid #ddd;border-radius:24px;font-size:16px;background:#f9f9f9}
+        .login-input:focus{outline:none;border-color:#2d8cff}
+        .login-btn{width:100%;padding:14px;background:linear-gradient(95deg,#2d8cff,#4a9eff);color:white;border:none;border-radius:40px;font-size:18px;font-weight:bold;cursor:pointer}
+        .login-status{text-align:center;margin-top:16px;font-size:13px;color:#ff6b6b}
+        .login-footer{text-align:center;margin-top:24px;font-size:12px;color:#888;border-top:1px solid #eee;padding-top:20px}
+        .logout-bar{position:fixed;bottom:20px;right:20px;z-index:100;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);padding:8px 16px;border-radius:40px;font-size:12px;color:white;cursor:pointer}
+        .user-badge{position:fixed;bottom:20px;left:20px;z-index:100;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);padding:6px 14px;border-radius:40px;font-size:12px;color:#ccc}
+        
+        /* 主界面 */
+        .container{max-width:1600px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:20px}
+        @media(min-width:900px){body{padding:24px}.container{grid-template-columns:1fr 1fr}}
+        .panel{background:rgba(245,250,255,0.92);backdrop-filter:blur(12px);border-radius:24px;border:1px solid rgba(100,180,250,0.5);overflow:hidden}
+        .panel-header{padding:18px 24px;background:linear-gradient(135deg,rgba(100,180,250,0.25),rgba(150,200,255,0.15));border-bottom:1px solid rgba(70,150,230,0.5);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+        .panel-header h2{font-size:1.35rem;color:#1a6ea8}
+        .btn-tiny{background:rgba(45,140,255,0.15);border:1px solid rgba(45,140,255,0.5);border-radius:20px;padding:4px 10px;font-size:11px;cursor:pointer;color:#1a6ea8}
+        .panel-content{padding:20px 24px}
+        .video-wrapper{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:16px;overflow:hidden;margin-bottom:16px;border:2px solid #4a9eff}
+        #videoElement{width:100%;height:100%;object-fit:contain}
+        #watermarkCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+        .crop-overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:10}
+        .crop-box{position:absolute;border:3px solid #2d8cff;background:rgba(45,140,255,0.15);box-shadow:0 0 0 9999px rgba(0,0,0,0.7);cursor:move}
+        .crop-box .resize-handle{position:absolute;width:12px;height:12px;background:#2d8cff;border:2px solid white;border-radius:2px}
+        .resize-handle.nw{top:-6px;left:-6px;cursor:nw-resize}
+        .resize-handle.n{top:-6px;left:50%;transform:translateX(-50%);cursor:n-resize}
+        .resize-handle.ne{top:-6px;right:-6px;cursor:ne-resize}
+        .resize-handle.w{top:50%;left:-6px;transform:translateY(-50%);cursor:w-resize}
+        .resize-handle.e{top:50%;right:-6px;transform:translateY(-50%);cursor:e-resize}
+        .resize-handle.sw{bottom:-6px;left:-6px;cursor:sw-resize}
+        .resize-handle.s{bottom:-6px;left:50%;transform:translateX(-50%);cursor:s-resize}
+        .resize-handle.se{bottom:-6px;right:-6px;cursor:se-resize}
+        .crop-info{position:absolute;bottom:8px;right:12px;background:rgba(0,0,0,0.75);color:#2d8cff;font-size:12px;padding:4px 12px;border-radius:20px;z-index:15}
+        .crop-toolbar{position:absolute;bottom:12px;left:12px;z-index:15;display:flex;gap:8px}
+        .crop-btn{background:rgba(0,0,0,0.7);border:1px solid #2d8cff;color:#2d8cff;padding:4px 12px;border-radius:20px;font-size:11px;cursor:pointer}
+        .crop-active-badge{position:absolute;top:12px;left:12px;background:#2d8cffcc;color:white;padding:4px 12px;border-radius:20px;font-size:11px;z-index:15}
+        .recording-badge{position:absolute;top:12px;right:12px;background:#ff3b3b;padding:5px 14px;border-radius:30px;font-size:12px;font-weight:bold;display:none;animation:pulse 1s infinite;z-index:25;color:white}
+        @keyframes pulse{0%{opacity:1}50%{opacity:0.6}100%{opacity:1}}
+        .preview-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.92);z-index:10000;justify-content:center;align-items:center}
+        .preview-modal.active{display:flex}
+        .preview-container{position:relative;width:90vw;height:90vh;background:#000;border-radius:20px;overflow:hidden}
+        .preview-video{width:100%;height:100%;object-fit:contain}
+        .preview-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+        .close-preview{position:absolute;top:20px;right:30px;background:#ff5555;color:white;border:none;width:48px;height:48px;border-radius:50%;font-size:28px;cursor:pointer;z-index:10010}
+        .progress-bar-bg{width:100%;height:6px;background:rgba(0,0,0,0.2);border-radius:10px;overflow:hidden}
+        .progress-fill{height:100%;background:linear-gradient(90deg,#2d8cff,#6ab0ff);width:0%}
+        .form-row{margin-bottom:16px}
+        .form-label{font-size:13px;font-weight:600;margin-bottom:6px;color:#1a5f8c}
+        .form-control{width:100%;padding:10px 14px;background:white;border:1px solid #7bb8e0;border-radius:12px}
+        .slider-group{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+        .slider-group label{width:70px;font-size:13px}
+        input[type=range]{flex:1;height:5px;background:#cce4ff}
+        .range-value{width:50px;text-align:center;color:#2d8cff}
+        .color-row{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+        .color-box{width:48px;height:38px;border-radius:10px;border:1px solid #7bb8e0}
+        .grid-2col{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+        .btn-group{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+        .btn{flex:1;padding:10px 16px;border-radius:40px;font-weight:600;font-size:14px;cursor:pointer;background:#eef5ff;color:#1a6ea8;text-align:center;border:1px solid #b8d6ff}
+        .btn-primary{background:linear-gradient(95deg,#2d8cff,#4a9eff);color:white}
+        .btn-danger{background:linear-gradient(95deg,#ff6b6b,#ff5252);color:white}
+        .btn-success{background:linear-gradient(95deg,#4caf50,#45a049);color:white}
+        .btn-info{background:linear-gradient(95deg,#26a69a,#009688);color:white}
+        .btn:disabled{opacity:0.5;cursor:not-allowed}
+        .divider{height:1px;background:rgba(100,150,200,0.3);margin:18px 0}
+        .toast-msg{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#1e3a5f;padding:10px 28px;border-radius:40px;color:white;z-index:9999;opacity:0;transition:opacity 0.2s;pointer-events:none}
+        .toast-msg.show{opacity:1}
+        .speed-group{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+        .speed-btn{flex:1;background:#e0edfc;border-radius:20px;padding:6px 0;text-align:center;cursor:pointer;font-size:13px}
+        .speed-btn.active{background:#2d8cff;color:white}
+        .status-bar{margin-top:15px;padding:10px;border-radius:6px;background:rgba(0,0,0,0.3);font-size:13px;color:#d1d1d1;text-align:center}
+        .position-control{margin-bottom:16px;padding:8px;background:rgba(100,180,250,0.1);border-radius:12px}
+        .align-buttons{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+        .input-group{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+        .input-group input{flex:1;padding:6px 10px;border-radius:8px;border:1px solid #7bb8e0}
+    </style>
+</head>
+<body>
+
+<div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+        <h2>🎬 视频水印工具</h2>
+        <div class="sub">请输入账号密码登录</div>
+        <input type="text" id="loginUsername" class="login-input" placeholder="用户名">
+        <input type="password" id="loginPassword" class="login-input" placeholder="密码">
+        <button id="loginBtn" class="login-btn">登 录</button>
+        <div id="loginStatus" class="login-status"></div>
+        <div class="login-footer">付费用户请联系客服获取账号</div>
+    </div>
+</div>
+
+<div id="mainApp" style="display:none">
+    <div class="user-badge" id="userBadge"></div>
+    <div id="logoutBtn" class="logout-bar">🚪 退出登录</div>
+    
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header"><h2>🎬 视频预览 & 裁剪</h2><div class="config-buttons"><button id="exportConfigBtn" class="btn-tiny">📤 导出配置</button><button id="importConfigBtn" class="btn-tiny">📥 导入配置</button><input type="file" id="configFileInput" accept="application/json" style="display:none"></div></div>
+            <div class="panel-content">
+                <div class="video-wrapper" id="videoWrapper">
+                    <video id="videoElement" controls></video>
+                    <canvas id="watermarkCanvas"></canvas>
+                    <div class="crop-overlay" id="cropOverlay" style="display:none"><div class="crop-box" id="cropBox"><div class="resize-handle nw"></div><div class="resize-handle n"></div><div class="resize-handle ne"></div><div class="resize-handle w"></div><div class="resize-handle e"></div><div class="resize-handle sw"></div><div class="resize-handle s"></div><div class="resize-handle se"></div></div><div class="crop-info" id="cropInfo">选择裁剪区域</div><div class="crop-toolbar"><button class="crop-btn" id="applyCropBtn">✅ 确认裁剪</button><button class="crop-btn" id="cancelCropBtn">🗑️ 取消</button><button class="crop-btn" id="resetCropBtn">🔄 重置</button></div></div>
+                    <div class="recording-badge" id="recordingBadge">🔴 录制中</div>
+                    <div id="cropActiveBadge" class="crop-active-badge" style="display:none">✂️ 裁剪生效中</div>
+                </div>
+                <div class="progress-area"><div class="progress-bar-bg"><div class="progress-fill" id="progressFill"></div></div></div>
+                <div class="divider"></div>
+                <div class="form-row"><label class="form-label">📅 起始时间</label><div class="grid-2col"><input type="datetime-local" id="startDateTime" class="form-control"><input type="number" id="timeOffset" value="0" class="form-control" placeholder="偏移(秒)"></div></div>
+                <div class="form-row"><label class="form-label">📝 时间格式</label><select id="timeFormat" class="form-control"><option value="YYYY-MM-DD HH:mm:ss">2026-03-03 03:03:03</option><option value="YYYY/MM/DD HH:mm:ss">2026/03/03 03:03:03</option><option value="YYYY年MM月DD日 HH:mm:ss">2026年03月03日 03:03:03</option></select></div>
+                <div class="form-row"><label class="form-label">🎨 时间水印样式</label><div class="grid-2col"><select id="fontFamily" class="form-control"><option value="Microsoft YaHei">微软雅黑</option><option value="SimHei">黑体</option><option value="SimSun">宋体</option><option value="KaiTi">楷体</option><option value="Arial">Arial</option></select><input type="color" id="fontColor" value="#ffffff" style="height:42px;"></div></div>
+                <div class="slider-group"><label>字体大小</label><input type="range" id="fontSize" min="12" max="80" value="26"><span class="range-value" id="fontSizeVal">26</span></div>
+                <div class="slider-group"><label>透明度</label><input type="range" id="fontOpacity" min="0" max="1" step="0.05" value="1"><span id="fontOpacityVal">1</span></div>
+                <div class="color-row"><label>背景颜色</label><input type="color" id="bgColor" value="#000000" class="color-box"><span>透明度</span><input type="range" id="bgOpacity" min="0" max="1" step="0.05" value="0.5" style="width:100px;"><span id="bgOpacityVal">0.5</span></div>
+                <div class="position-control"><div class="position-title">时间水印位置</div><div class="slider-group"><label>水平</label><input type="range" id="horizontalPos" min="0" max="1000" value="900"><span id="horizontalVal">90.0</span>%</div><div class="slider-group"><label>垂直</label><input type="range" id="verticalPos" min="0" max="1000" value="900"><span id="verticalVal">90.0</span>%</div></div>
+                <div class="slider-group"><label>旋转</label><input type="range" id="rotateAngle" min="-30" max="30" value="0"><span id="rotateVal">0</span>°</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header"><h2>✍️ 自定义水印 & 录制控制</h2></div>
+            <div class="panel-content">
+                <button id="enableCropBtn" class="btn btn-info" style="margin-bottom:12px;width:100%">✂️ 开启裁剪选择框</button>
+                <div class="form-row"><label>📝 自定义文字</label><input type="text" id="customText" class="form-control" value="视频水印"></div>
+                <div class="form-row"><label>🎨 字体</label><select id="customFontFamily" class="form-control"><option value="Microsoft YaHei">微软雅黑</option><option value="SimHei">黑体</option><option value="KaiTi">楷体</option><option value="Arial">Arial</option></select></div>
+                <div class="grid-2col"><div class="slider-group"><label>字体大小</label><input type="range" id="customFontSize" min="12" max="80" value="28"><span id="customFontSizeVal">28</span></div><input type="color" id="customFontColor" value="#ff0000"></div>
+                <div class="slider-group"><label>透明度</label><input type="range" id="customFontOpacity" min="0" max="1" step="0.05" value="0.8"><span id="customFontOpacityVal">0.8</span></div>
+                <div class="color-row"><label>背景色</label><input type="color" id="customBgColor" value="#000000"><span>透明度</span><input type="range" id="customBgOpacity" min="0" max="1" step="0.05" value="0.4"><span id="customBgOpacityVal">0.4</span></div>
+                <div class="position-control"><div class="position-title">自定义水印位置</div><div class="slider-group"><label>水平</label><input type="range" id="customHorizontalPos" min="0" max="1000" value="100"><span id="customHorizontalVal">10.0</span>%</div><div class="slider-group"><label>垂直</label><input type="range" id="customVerticalPos" min="0" max="1000" value="100"><span id="customVerticalVal">10.0</span>%</div></div>
+                <div class="slider-group"><label>旋转</label><input type="range" id="customRotateAngle" min="-30" max="30" value="0"><span id="customRotateVal">0</span>°</div>
+                <div class="align-buttons"><button id="alignHorizontalBtn" class="btn btn-info">水平对齐</button><button id="alignVerticalBtn" class="btn btn-info">垂直对齐</button><button id="alignBothBtn" class="btn btn-success">完全对齐</button></div>
+                <div class="form-row"><label>导出格式</label><select id="exportFormat"><option>mp4</option><option>webm</option></select></div>
+                <div class="speed-group"><label style="width:70px">速度</label><div class="speed-btn" data-speed="1">1x</div><div class="speed-btn" data-speed="2">2x</div><div class="speed-btn" data-speed="4">4x</div><div class="speed-btn" data-speed="8">8x</div></div>
+                <button id="uploadBtn" class="btn btn-primary" style="width:100%">📁 选择视频</button>
+                <input type="file" id="videoFile" accept="video/*" style="display:none">
+                <div class="btn-group"><button id="previewBtn" class="btn btn-success">👁️ 预览效果</button><button id="recordBtn" class="btn btn-primary" disabled>🔴 录制</button><button id="stopBtn" class="btn btn-danger" disabled>⏹️ 停止</button><button id="exportBtn" class="btn" disabled>💾 导出</button></div>
+                <div class="status-bar" id="statusBar">状态: 等待视频</div>
+                <div>录制进度: <span id="recordTime">00:00:00</span><input type="range" id="recordProgress" min="0" max="100" value="0" disabled style="width:100%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="previewModal" class="preview-modal"><button class="close-preview" id="closePreviewBtn">✕</button><div class="preview-container"><video id="previewVideo" class="preview-video" muted></video><canvas id="previewCanvas" class="preview-canvas"></canvas></div></div>
+<div class="toast-msg" id="toastMsg"></div>
+
+<script>
+    (function(){
+        const USER_LIST_URL = 'https://raw.githubusercontent.com/lmmmmmmmmu-glitch/888.github.io/main/watermark_users.json';
+        let currentUser = null;
+        
+        async function verifyLogin(username, password) {
+            try {
+                const response = await fetch(USER_LIST_URL);
+                const data = await response.json();
+                const users = data.users || data.用户 || [];
+                return users.find(u => (u.username === username || u.用户名 === username) && (u.password === password || u.口令 === password));
+            } catch(e) {
+                return null;
+            }
+        }
+        
+        async function checkSavedLogin() {
+            const saved = localStorage.getItem('watermark_user');
+            if(saved) {
+                try {
+                    const user = JSON.parse(saved);
+                    const valid = await verifyLogin(user.username, user.password);
+                    if(valid) {
+                        currentUser = user;
+                        document.getElementById('loginOverlay').classList.add('hide');
+                        document.getElementById('mainApp').style.display = 'block';
+                        document.getElementById('userBadge').innerHTML = `👤 ${user.username}`;
+                        initMainApp();
+                        return true;
+                    }
+                } catch(e) {}
+            }
+            return false;
+        }
+        
+        document.getElementById('loginBtn').onclick = async function() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const statusDiv = document.getElementById('loginStatus');
+            
+            if(!username || !password) {
+                statusDiv.innerHTML = '请输入用户名和密码';
+                return;
+            }
+            
+            statusDiv.innerHTML = '⏳ 验证中...';
+            const user = await verifyLogin(username, password);
+            
+            if(user) {
+                currentUser = { username, password };
+                localStorage.setItem('watermark_user', JSON.stringify(currentUser));
+                document.getElementById('loginOverlay').classList.add('hide');
+                document.getElementById('mainApp').style.display = 'block';
+                document.getElementById('userBadge').innerHTML = `👤 ${username}`;
+                initMainApp();
+            } else {
+                statusDiv.innerHTML = '❌ 用户名或密码错误';
+            }
+        };
+        
+        document.getElementById('logoutBtn').onclick = function() {
+            localStorage.removeItem('watermark_user');
+            currentUser = null;
+            document.getElementById('loginOverlay').classList.remove('hide');
+            document.getElementById('mainApp').style.display = 'none';
+        };
+        
+        checkSavedLogin();
+        
+        function initMainApp() {
+            const video = document.getElementById('videoElement');
+            const canvas = document.getElementById('watermarkCanvas');
+            const ctx = canvas.getContext('2d');
+            let currentCrop = null;
+            let isRecording = false, mediaRecorder = null, recordedChunks = [], animationFrame = null;
+            let currentPlaybackRate = 1, currentVideoUrl = null;
+            
+            function showToast(msg) {
+                const toast = document.getElementById('toastMsg');
+                toast.textContent = msg;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 2000);
+            }
+            
+            function getBaseDateTime() {
+                let ds = document.getElementById('startDateTime').value;
+                let base = new Date(ds);
+                if(isNaN(base.getTime())) base = new Date();
+                let offset = parseInt(document.getElementById('timeOffset').value)||0;
+                base.setSeconds(base.getSeconds()+offset);
+                return base;
+            }
+            
+            function getWatermarkTime(t) {
+                let base = getBaseDateTime();
+                return new Date(base.getTime() + (t||0)*1000);
+            }
+            
+            function formatTime(date, fmt) {
+                let Y=date.getFullYear(),M=String(date.getMonth()+1).padStart(2,'0'),D=String(date.getDate()).padStart(2,'0'),H=String(date.getHours()).padStart(2,'0'),MM=String(date.getMinutes()).padStart(2,'0'),SS=String(date.getSeconds()).padStart(2,'0');
+                return fmt.replace('YYYY',Y).replace('MM',M).replace('DD',D).replace('HH',H).replace('mm',MM).replace('ss',SS);
+            }
+            
+            function drawSingle(ctxTarget, text, x, y, opt) {
+                ctxTarget.save();
+                ctxTarget.translate(x,y);
+                ctxTarget.rotate((opt.angle||0)*Math.PI/180);
+                ctxTarget.font = `${opt.fontSize}px ${opt.fontFamily}`;
+                ctxTarget.textAlign='center';
+                ctxTarget.textBaseline='middle';
+                let m=ctxTarget.measureText(text);
+                let bw=m.width+16, bh=opt.fontSize+8;
+                let bgAlpha=Math.floor(opt.bgOpacity*255).toString(16).padStart(2,'0');
+                ctxTarget.fillStyle=`${opt.bgColor}${bgAlpha}`;
+                ctxTarget.fillRect(-bw/2,-bh/2,bw,bh);
+                let fa=Math.floor(opt.fontOpacity*255).toString(16).padStart(2,'0');
+                ctxTarget.fillStyle=`${opt.fontColor}${fa}`;
+                ctxTarget.fillText(text,0,0);
+                ctxTarget.restore();
+            }
+            
+            function drawWatermarks(ctxTarget, targetWidth, targetHeight, currentTime) {
+                if(!targetWidth || !targetHeight) return;
+                ctxTarget.clearRect(0, 0, targetWidth, targetHeight);
+                if(video.readyState >= 2 && video.videoWidth) {
+                    if(currentCrop && currentCrop.w > 0) {
+                        ctxTarget.drawImage(video, currentCrop.x, currentCrop.y, currentCrop.w, currentCrop.h, 0, 0, targetWidth, targetHeight);
+                    } else {
+                        let vw = video.videoWidth, vh = video.videoHeight;
+                        let ratioW = targetWidth / targetHeight, ratioV = vw / vh;
+                        let dw, dh, dx, dy;
+                        if(ratioV > ratioW) { dw = targetWidth; dh = targetWidth / ratioV; dx = 0; dy = (targetHeight - dh) / 2; }
+                        else { dh = targetHeight; dw = targetHeight * ratioV; dx = (targetWidth - dw) / 2; dy = 0; }
+                        ctxTarget.drawImage(video, dx, dy, dw, dh);
+                    }
+                }
+                const timeDate = getWatermarkTime(currentTime);
+                const timeStr = formatTime(timeDate, document.getElementById('timeFormat').value);
+                const tX = targetWidth * (parseFloat(document.getElementById('horizontalPos').value)/10 / 100);
+                const tY = targetHeight * (parseFloat(document.getElementById('verticalPos').value)/10 / 100);
+                drawSingle(ctxTarget, timeStr, tX, tY, {
+                    fontFamily: document.getElementById('fontFamily').value,
+                    fontSize: parseInt(document.getElementById('fontSize').value),
+                    fontColor: document.getElementById('fontColor').value,
+                    fontOpacity: parseFloat(document.getElementById('fontOpacity').value),
+                    bgColor: document.getElementById('bgColor').value,
+                    bgOpacity: parseFloat(document.getElementById('bgOpacity').value),
+                    angle: parseInt(document.getElementById('rotateAngle').value)
+                });
+                const cTxt = document.getElementById('customText').value.trim();
+                if(cTxt) {
+                    const cX = targetWidth * (parseFloat(document.getElementById('customHorizontalPos').value)/10 / 100);
+                    const cY = targetHeight * (parseFloat(document.getElementById('customVerticalPos').value)/10 / 100);
+                    drawSingle(ctxTarget, cTxt, cX, cY, {
+                        fontFamily: document.getElementById('customFontFamily').value,
+                        fontSize: parseInt(document.getElementById('customFontSize').value),
+                        fontColor: document.getElementById('customFontColor').value,
+                        fontOpacity: parseFloat(document.getElementById('customFontOpacity').value),
+                        bgColor: document.getElementById('customBgColor').value,
+                        bgOpacity: parseFloat(document.getElementById('customBgOpacity').value),
+                        angle: parseInt(document.getElementById('customRotateAngle').value)
+                    });
+                }
+            }
+            
+            function resizeCanvas() {
+                if(!video.videoWidth) return;
+                if(currentCrop && currentCrop.w > 0) {
+                    canvas.width = currentCrop.w;
+                    canvas.height = currentCrop.h;
+                } else {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                }
+                drawMain();
+            }
+            
+            function drawMain() {
+                if(!video.src || canvas.width === 0) return;
+                drawWatermarks(ctx, canvas.width, canvas.height, video.currentTime);
+            }
+            
+            function loadVideo(file) {
+                if(currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
+                currentVideoUrl = URL.createObjectURL(file);
+                video.src = currentVideoUrl;
+                video.onloadedmetadata = () => {
+                    resizeCanvas();
+                    video.playbackRate = currentPlaybackRate;
+                    document.getElementById('statusBar').innerText = `已加载: ${file.name}`;
+                    document.getElementById('recordBtn').disabled = false;
+                    document.getElementById('exportBtn').disabled = true;
+                    drawMain();
+                };
+                video.ontimeupdate = drawMain;
+                if(isRecording) stopRecording();
+                recordedChunks = [];
+            }
+            
+            function startRecording() {
+                if(!video.src){showToast("请先选择视频");return;}
+                if(isRecording) return;
+                recordedChunks = [];
+                isRecording = true;
+                video.currentTime = 0;
+                video.playbackRate = currentPlaybackRate;
+                document.getElementById('recordBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('exportBtn').disabled = true;
+                document.getElementById('recordingBadge').style.display = 'block';
+                
+                let canvasStream = canvas.captureStream(30);
+                let finalStream = canvasStream;
+                let mimeType = document.getElementById('exportFormat').value === 'mp4' ? 'video/mp4; codecs=avc1,mp4a' : 'video/webm; codecs=vp9,opus';
+                if(!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+                mediaRecorder = new MediaRecorder(finalStream, { mimeType });
+                mediaRecorder.ondataavailable = e => { if(e.data.size > 0) recordedChunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    isRecording = false;
+                    document.getElementById('recordBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                    document.getElementById('exportBtn').disabled = false;
+                    document.getElementById('recordingBadge').style.display = 'none';
+                    document.getElementById('statusBar').innerText = '录制完成';
+                    showToast('录制完成');
+                    if(window._progInt) clearInterval(window._progInt);
+                    if(window._recTimer) clearInterval(window._recTimer);
+                };
+                mediaRecorder.start();
+                
+                function drawFrame() {
+                    if(!isRecording) return;
+                    drawWatermarks(ctx, canvas.width, canvas.height, video.currentTime);
+                    animationFrame = requestAnimationFrame(drawFrame);
+                }
+                drawFrame();
+                
+                let duration = video.duration;
+                window._progInt = setInterval(() => {
+                    if(video.currentTime >= duration - 0.05 && isRecording) stopRecording();
+                    let percent = (video.currentTime / duration) * 100;
+                    document.getElementById('progressFill').style.width = `${percent}%`;
+                }, 100);
+                window._recTimer = setInterval(() => {
+                    let elapsed = Math.floor(video.currentTime);
+                    let hh = String(Math.floor(elapsed / 3600)).padStart(2,'0');
+                    let mm = String(Math.floor((elapsed % 3600) / 60)).padStart(2,'0');
+                    let ss = String(elapsed % 60).padStart(2,'0');
+                    document.getElementById('recordTime').innerText = `${hh}:${mm}:${ss}`;
+                    document.getElementById('recordProgress').value = (video.currentTime / duration) * 100;
+                }, 100);
+                video.play();
+                showToast(`开始录制`);
+            }
+            
+            function stopRecording() {
+                if(mediaRecorder && isRecording) mediaRecorder.stop();
+                if(animationFrame) cancelAnimationFrame(animationFrame);
+                if(window._progInt) clearInterval(window._progInt);
+                if(window._recTimer) clearInterval(window._recTimer);
+                video.pause();
+                document.getElementById('statusBar').innerText = '录制停止';
+                showToast("停止录制");
+            }
+            
+            function exportVideo() {
+                if(recordedChunks.length === 0){showToast("无录制数据");return;}
+                let format = document.getElementById('exportFormat').value;
+                let ext = format === 'mp4' ? 'mp4' : 'webm';
+                let mime = format === 'mp4' ? 'video/mp4' : 'video/webm';
+                let blob = new Blob(recordedChunks, { type: mime });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = `watermark_${Date.now()}.${ext}`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast("导出成功");
+            }
+            
+            function setPlaybackSpeed(speed) {
+                currentPlaybackRate = speed;
+                if(video.src) video.playbackRate = speed;
+                document.querySelectorAll('.speed-btn').forEach(btn => {
+                    if(parseFloat(btn.dataset.speed) === speed) btn.classList.add('active');
+                    else btn.classList.remove('active');
+                });
+            }
+            
+            // 裁剪功能
+            let originalVideoWidth = 0, originalVideoHeight = 0;
+            const wrapper = document.getElementById('videoWrapper');
+            const cropOverlay = document.getElementById('cropOverlay');
+            const cropBox = document.getElementById('cropBox');
+            
+            function updateCropFromBox() {
+                if(!originalVideoWidth) return;
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const boxRect = cropBox.getBoundingClientRect();
+                const scaleX = originalVideoWidth / wrapperRect.width;
+                const scaleY = originalVideoHeight / wrapperRect.height;
+                let cropX = (boxRect.left - wrapperRect.left) * scaleX;
+                let cropY = (boxRect.top - wrapperRect.top) * scaleY;
+                let cropW = boxRect.width * scaleX;
+                let cropH = boxRect.height * scaleY;
+                cropX = Math.max(0, Math.min(cropX, originalVideoWidth - 1));
+                cropY = Math.max(0, Math.min(cropY, originalVideoHeight - 1));
+                cropW = Math.min(cropW, originalVideoWidth - cropX);
+                cropH = Math.min(cropH, originalVideoHeight - cropY);
+                if(cropW < 20) cropW = 20;
+                if(cropH < 20) cropH = 20;
+                document.getElementById('cropInfo').innerText = `裁剪区域: ${Math.round(cropW)}×${Math.round(cropH)}`;
+            }
+            
+            function applyCrop() {
+                if(!originalVideoWidth) return;
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const boxRect = cropBox.getBoundingClientRect();
+                const scaleX = originalVideoWidth / wrapperRect.width;
+                const scaleY = originalVideoHeight / wrapperRect.height;
+                let cropX = (boxRect.left - wrapperRect.left) * scaleX;
+                let cropY = (boxRect.top - wrapperRect.top) * scaleY;
+                let cropW = boxRect.width * scaleX;
+                let cropH = boxRect.height * scaleY;
+                cropX = Math.max(0, Math.min(cropX, originalVideoWidth - 1));
+                cropY = Math.max(0, Math.min(cropY, originalVideoHeight - 1));
+                cropW = Math.min(cropW, originalVideoWidth - cropX);
+                cropH = Math.min(cropH, originalVideoHeight - cropY);
+                if(cropW < 10 || cropH < 10) { showToast("裁剪区域过小"); return; }
+                currentCrop = { x: cropX, y: cropY, w: cropW, h: cropH };
+                cropOverlay.style.display = 'none';
+                document.getElementById('cropActiveBadge').style.display = 'block';
+                resizeCanvas();
+                drawMain();
+                showToast(`裁剪已应用`);
+            }
+            
+            function cancelCrop() {
+                currentCrop = null;
+                document.getElementById('cropActiveBadge').style.display = 'none';
+                cropOverlay.style.display = 'none';
+                resizeCanvas();
+                drawMain();
+                showToast("已取消裁剪");
+            }
+            
+            function enableCropMode() {
+                if(!video.videoWidth) { showToast("请先加载视频"); return; }
+                originalVideoWidth = video.videoWidth;
+                originalVideoHeight = video.videoHeight;
+                const wrapperRect = wrapper.getBoundingClientRect();
+                if(currentCrop) {
+                    const scaleX = wrapperRect.width / originalVideoWidth;
+                    const scaleY = wrapperRect.height / originalVideoHeight;
+                    cropBox.style.left = (currentCrop.x * scaleX) + 'px';
+                    cropBox.style.top = (currentCrop.y * scaleY) + 'px';
+                    cropBox.style.width = (currentCrop.w * scaleX) + 'px';
+                    cropBox.style.height = (currentCrop.h * scaleY) + 'px';
+                } else {
+                    cropBox.style.left = '0px';
+                    cropBox.style.top = '0px';
+                    cropBox.style.width = wrapperRect.width + 'px';
+                    cropBox.style.height = wrapperRect.height + 'px';
+                }
+                updateCropFromBox();
+                cropOverlay.style.display = 'block';
+                showToast("拖动蓝色选框调整裁剪区域");
+            }
+            
+            function initCropInteractions() {
+                let isResizing = false, handleType = null;
+                let startMouse = { x: 0, y: 0 };
+                let startRectData = { left: 0, top: 0, width: 0, height: 0 };
+                const onMouseDown = (e, handle) => {
+                    e.stopPropagation();
+                    isResizing = true;
+                    handleType = handle;
+                    startMouse.x = e.clientX;
+                    startMouse.y = e.clientY;
+                    const rect = cropBox.getBoundingClientRect();
+                    const parentRect = wrapper.getBoundingClientRect();
+                    startRectData.left = rect.left - parentRect.left;
+                    startRectData.top = rect.top - parentRect.top;
+                    startRectData.width = rect.width;
+                    startRectData.height = rect.height;
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                };
+                const onMouseMove = (e) => {
+                    if(!isResizing) return;
+                    let dx = e.clientX - startMouse.x;
+                    let dy = e.clientY - startMouse.y;
+                    let newLeft = startRectData.left, newTop = startRectData.top, newWidth = startRectData.width, newHeight = startRectData.height;
+                    const parentRect = wrapper.getBoundingClientRect();
+                    if(handleType === 'move') {
+                        newLeft = Math.min(Math.max(0, startRectData.left + dx), parentRect.width - newWidth);
+                        newTop = Math.min(Math.max(0, startRectData.top + dy), parentRect.height - newHeight);
+                    } else {
+                        if(handleType.includes('w')) { let delta = Math.min(dx, startRectData.width - 20); newWidth = startRectData.width - delta; newLeft = startRectData.left + delta; }
+                        if(handleType.includes('e')) { newWidth = Math.min(parentRect.width - newLeft, startRectData.width + dx); }
+                        if(handleType.includes('n')) { let delta = Math.min(dy, startRectData.height - 20); newHeight = startRectData.height - delta; newTop = startRectData.top + delta; }
+                        if(handleType.includes('s')) { newHeight = Math.min(parentRect.height - newTop, startRectData.height + dy); }
+                        newWidth = Math.max(50, Math.min(newWidth, parentRect.width - newLeft));
+                        newHeight = Math.max(50, Math.min(newHeight, parentRect.height - newTop));
+                    }
+                    cropBox.style.left = newLeft + 'px';
+                    cropBox.style.top = newTop + 'px';
+                    cropBox.style.width = newWidth + 'px';
+                    cropBox.style.height = newHeight + 'px';
+                    updateCropFromBox();
+                };
+                const onMouseUp = () => {
+                    isResizing = false;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                };
+                cropBox.addEventListener('mousedown', (e) => { if(e.target === cropBox || e.target.classList.contains('crop-box')) { e.preventDefault(); onMouseDown(e, 'move'); } });
+                document.querySelectorAll('.resize-handle').forEach(handle => {
+                    handle.addEventListener('mousedown', (e) => { e.stopPropagation(); onMouseDown(e, handle.classList[1]); });
+                });
+            }
+            
+            // 事件绑定
+            document.getElementById('uploadBtn').onclick = () => document.getElementById('videoFile').click();
+            document.getElementById('videoFile').onchange = e => { if(e.target.files[0]) loadVideo(e.target.files[0]); };
+            document.getElementById('recordBtn').onclick = startRecording;
+            document.getElementById('stopBtn').onclick = stopRecording;
+            document.getElementById('exportBtn').onclick = exportVideo;
+            document.getElementById('enableCropBtn').onclick = enableCropMode;
+            document.getElementById('applyCropBtn').onclick = applyCrop;
+            document.getElementById('cancelCropBtn').onclick = cancelCrop;
+            document.getElementById('resetCropBtn').onclick = () => { if(originalVideoWidth) { cropBox.style.left = '0px'; cropBox.style.top = '0px'; cropBox.style.width = wrapper.getBoundingClientRect().width + 'px'; cropBox.style.height = wrapper.getBoundingClientRect().height + 'px'; updateCropFromBox(); } };
+            document.querySelectorAll('.speed-btn').forEach(btn => btn.addEventListener('click',()=>setPlaybackSpeed(parseFloat(btn.dataset.speed))));
+            document.getElementById('alignHorizontalBtn').onclick = () => { document.getElementById('customHorizontalPos').value = document.getElementById('horizontalPos').value; let p = (document.getElementById('horizontalPos').value/10).toFixed(1); document.getElementById('customHorizontalVal').innerText = p; drawMain(); };
+            document.getElementById('alignVerticalBtn').onclick = () => { document.getElementById('customVerticalPos').value = document.getElementById('verticalPos').value; let p = (document.getElementById('verticalPos').value/10).toFixed(1); document.getElementById('customVerticalVal').innerText = p; drawMain(); };
+            document.getElementById('alignBothBtn').onclick = () => { document.getElementById('alignHorizontalBtn').onclick(); document.getElementById('alignVerticalBtn').onclick(); };
+            
+            function bindRange(id,span) { document.getElementById(id).addEventListener('input',()=>{ document.getElementById(span).innerText = document.getElementById(id).value; drawMain(); }); }
+            bindRange('fontSize','fontSizeVal'); bindRange('fontOpacity','fontOpacityVal'); bindRange('bgOpacity','bgOpacityVal'); bindRange('rotateAngle','rotateVal');
+            bindRange('customFontSize','customFontSizeVal'); bindRange('customFontOpacity','customFontOpacityVal'); bindRange('customBgOpacity','customBgOpacityVal'); bindRange('customRotateAngle','customRotateVal');
+            
+            function setupPositionControl(range, valSpan) {
+                range.addEventListener('input', () => { let p = (range.value/10).toFixed(1); valSpan.innerText = p; drawMain(); });
+            }
+            setupPositionControl(document.getElementById('horizontalPos'), document.getElementById('horizontalVal'));
+            setupPositionControl(document.getElementById('verticalPos'), document.getElementById('verticalVal'));
+            setupPositionControl(document.getElementById('customHorizontalPos'), document.getElementById('customHorizontalVal'));
+            setupPositionControl(document.getElementById('customVerticalPos'), document.getElementById('customVerticalVal'));
+            
+            const allInputs = ['startDateTime','timeOffset','timeFormat','fontFamily','fontSize','fontColor','fontOpacity','bgColor','bgOpacity','rotateAngle','customText','customFontFamily','customFontSize','customFontColor','customFontOpacity','customBgColor','customBgOpacity','customRotate'];
+            allInputs.forEach(id => document.getElementById(id).addEventListener('input',()=>drawMain()));
+            
+            let now = new Date(); now.setSeconds(0);
+            document.getElementById('startDateTime').value = now.toISOString().slice(0,16);
+            setPlaybackSpeed(1);
+            initCropInteractions();
+            showToast("工具已启动");
+        }
+    })();
+</script>
+</body>
+</html>
