@@ -1,6 +1,6 @@
 {
   "users": [
-    {"username": "管理", "password": "bbcbbc0.", "expire": "永久"},
+    {"username": "管理", "password": "bbcbbc00", "expire": "永久"},
     {"username": "测试", "password": "88888888", "expire": "2025-12-31"}
   ],
   "note": "添加新用户请在此列表中添加，删除用户则删除对应项"
