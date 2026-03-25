@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP追剧神器 - 浏览器版</title>
+    <link href="https://cdn.jsdelivr.net/npm/video.js@8.10.0/dist/video-js.min.css" rel="stylesheet">
+    <style>
+        body { font-family: "微软雅黑", Arial, sans-serif; background: #f4f7fa; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); overflow: hidden; }
+        header { background: linear-gradient(135deg, #0d6efd, #6610f2); color: white; padding: 20px; text-align: center; }
+        header h1 { margin: 0; font-size: 28px; }
+        .input-area { padding: 20px; background: #f8f9fa; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        input[type="text"] { flex: 1; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; min-width: 300px; }
+        button { padding: 12px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; }
+        .parse-btn { background: #0d6efd; color: white; }
+        .play-btn { background: #198754; color: white; }
+        .switch-btn { background: #6c757d; color: white; }
+        .clear-btn { background: #dc3545; color: white; }
+        .status { padding: 10px 20px; font-size: 15px; min-height: 24px; }
+        .player-container { padding: 20px; background: #000; position: relative; }
+        .video-js { width: 100% !important; height: 500px !important; }
+        .result { padding: 20px; border-top: 1px solid #eee; }
+        textarea { width: 100%; height: 120px; font-family: Consolas, monospace; resize: vertical; }
+        .tips { font-size: 14px; color: #666; padding: 0 20px 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 VIP追剧神器（浏览器纯网页版）</h1>
+            <p>无需安装 • 直接播放 • 支持爱奇艺、腾讯视频、优酷等</p>
+        </header>
+
+        <div class="input-area">
+            <input type="text" id="videoUrl" placeholder="粘贴VIP视频链接，例如：https://v.qq.com/x/cover/..." value="https://v.qq.com/x/cover/mzc00200k5v2z4z/m0034z9zq0z.html">
+            <button class="parse-btn" onclick="parseVideo()">一键解析</button>
+            <button class="switch-btn" onclick="switchApi()">切换接口</button>
+            <button class="clear-btn" onclick="clearAll()">清空</button>
+        </div>
+
+        <div class="status" id="status">就绪 - 请输入视频链接后点击“一键解析”</div>
+
+        <div class="player-container">
+            <video id="player" class="video-js vjs-default-skin" controls preload="auto" data-setup='{"fluid": true, "playbackRates": [0.5, 1, 1.25, 1.5, 2]}'>
+                <p class="vjs-no-js">您的浏览器不支持视频播放，请使用现代浏览器。</p>
+            </video>
+        </div>
+
+        <div class="result">
+            <p><strong>当前接口：</strong> <span id="currentApi">黑米解析（推荐）</span></p>
+            <textarea id="resultArea" readonly placeholder="解析结果将显示在这里..."></textarea>
+            <button class="play-btn" onclick="playParsedUrl()" style="margin-top:10px;">▶ 在网页中播放</button>
+        </div>
+
+        <div class="tips">
+            <strong>使用提示：</strong><br>
+            1. 复制爱奇艺、腾讯视频、优酷等平台的VIP剧集链接<br>
+            2. 粘贴后点击“一键解析”<br>
+            3. 成功后点击“在网页中播放”即可观看<br>
+            4. 如果解析失败，请点击“切换接口”重试（接口不稳定是正常现象）
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/video.js@8.10.0/dist/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@videojs/http-streaming@3.12.0/dist/videojs-http-streaming.min.js"></script>
+
+    <script>
+        const parseApis = [
+            "https://www.myxin.top/jx/api/?url=",
+            "https://ys.lbbb.cc/?url=",
+            "https://vip.52jiexi.top/?url=",
+            "https://jx.xmflv.com/?url=",
+            "https://okjx.cc/?url=",
+            "http://jx.kkqtv.com/jx/api/?url=",
+            "https://jx.m3u8.tv/jiexi/?url=",
+            "http://api.bbbbbb.me/jx/?url="
+        ];
+        let currentIndex = 0;
+        let currentPlayUrl = "";
+
+        const player = videojs('player', {
+            controls: true,
+            autoplay: false,
+            preload: 'auto',
+            fluid: true,
+            playbackRates: [0.5, 1, 1.25, 1.5, 2]
+        });
+
+        function getCurrentApiName() {
+            const api = parseApis[currentIndex];
+            if (api.includes('myxin')) return "黑米解析（推荐）";
+            if (api.includes('lbbb')) return "萝卜影视（推荐）";
+            if (api.includes('52jiexi')) return "52解析";
+            if (api.includes('xmflv')) return "虾米解析";
+            return `接口 ${currentIndex + 1}`;
+        }
+
+        function updateApiDisplay() {
+            document.getElementById('currentApi').textContent = getCurrentApiName();
+        }
+
+        async function parseVideo() {
+            const url = document.getElementById('videoUrl').value.trim();
+            if (!url || !url.startsWith('http')) {
+                alert("请输入正确的视频链接！");
+                return;
+            }
+
+            const status = document.getElementById('status');
+            const resultArea = document.getElementById('resultArea');
+            status.textContent = "正在解析...";
+            resultArea.value = "请求中，请稍等...\n";
+
+            try {
+                const encodedUrl = encodeURIComponent(url);
+                const parseUrl = parseApis[currentIndex] + encodedUrl;
+
+                const response = await fetch(parseUrl, {
+                    method: 'GET',
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                });
+
+                let body = await response.text();
+                resultArea.value += "接口原始返回：\n" + body.substring(0, 800) + (body.length > 800 ? '...' : '') + "\n\n";
+
+                let realUrl = null;
+                try {
+                    const json = JSON.parse(body);
+                    realUrl = json.url || (json.data && json.data.url) || json.playUrl || json.m3u8;
+                } catch (e) {
+                    // 非JSON格式，尝试提取http链接
+                    const match = body.match(/https?:\/\/[^\s"']+\.(m3u8|mp4)/i);
+                    if (match) realUrl = match[0];
+                }
+
+                if (realUrl && realUrl.startsWith('http')) {
+                    if (realUrl.startsWith('//')) realUrl = 'https:' + realUrl;
+                    currentPlayUrl = realUrl;
+                    resultArea.value += `✅ 解析成功！\n真实播放地址：\n${realUrl}\n\n点击下方“在网页中播放”即可观看`;
+                    status.textContent = "解析成功！可以播放了";
+                } else {
+                    resultArea.value += "⚠️ 未提取到有效播放地址，请尝试切换接口";
+                    status.textContent = "解析失败，建议切换接口";
+                }
+            } catch (err) {
+                resultArea.value += `❌ 请求失败：${err.message}`;
+                status.textContent = "网络或接口异常";
+            }
+        }
+
+        function playParsedUrl() {
+            if (!currentPlayUrl) {
+                alert("请先点击“一键解析”获取播放地址！");
+                return;
+            }
+            player.src({
+                src: currentPlayUrl,
+                type: currentPlayUrl.endsWith('.m3u8') ? 'application/x-mpegURL' : 'video/mp4'
+            });
+            player.play();
+            document.getElementById('status').textContent = "正在加载视频...";
+        }
+
+        function switchApi() {
+            currentIndex = (currentIndex + 1) % parseApis.length;
+            updateApiDisplay();
+            document.getElementById('status').textContent = `已切换到：${getCurrentApiName()}`;
+        }
+
+        function clearAll() {
+            document.getElementById('videoUrl').value = "";
+            document.getElementById('resultArea').value = "";
+            currentPlayUrl = "";
+            player.pause();
+            document.getElementById('status').textContent = "已清空";
+        }
+
+        // 初始化
+        window.onload = () => {
+            updateApiDisplay();
+        };
+    </script>
+</body>
+</html>
